@@ -1,72 +1,73 @@
-#![allow(clippy::unused_io_amount)]
-
 use std::{
     io::Read,
-    mem::size_of,
+    mem::{size_of, transmute},
     net::{TcpListener, TcpStream},
 };
 
 #[derive(Debug)]
 #[repr(C)]
 struct A {
-    a: u64,
-    b: u32,
-    c: [u8; 24],
+    value_0: u64,
+    value_1: u32,
+    message: [u8; 24],
 }
 
 #[derive(Debug)]
 #[repr(C)]
 struct B {
-    a: u32,
-    b: [u8; 48],
+    value_0: u32,
+    message: [u8; 48],
+}
+
+fn next_variant<'a, I: Iterator<Item = &'a u8>>(iter: &mut I) -> Option<(u8, usize)> {
+    loop {
+        let variant = iter.next();
+
+        match variant {
+            Some(1) => break Some((1, size_of::<A>())),
+            Some(2) => break Some((2, size_of::<B>())),
+            Some(0) => continue,
+            Some(_) => unreachable!("should parse structs fully each time"),
+            None => break None,
+        };
+    }
 }
 
 fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
-    let mut io_buffer = [0u8; 128];
+    // very small buffer to demonstrate that buffer size doesn't matter
+    let mut io_buffer = [0u8; 32];
     let mut a_buffer = [0u8; size_of::<A>()];
     let mut b_buffer = [0u8; size_of::<B>()];
     let mut struct_buffer_idx = 0;
     let mut size_remaining = 0;
-    let mut variant: Option<u8> = None;
+    let mut variant: u8 = 0;
     loop {
         io_buffer.iter_mut().for_each(|byte| *byte = 0);
         let io_buffer_length = stream.read(&mut io_buffer)?;
         if io_buffer_length == 0 {
             break Ok(());
         };
-        let mut iter = io_buffer.iter();
+        let mut io_buffer_iter = io_buffer.iter();
         'parse: loop {
             if size_remaining == 0 {
-                match variant {
-                    Some(variant) => match variant {
-                        1 => size_remaining = size_of::<A>(),
-                        2 => size_remaining = size_of::<B>(),
-                        variant => panic!("unknown variant {variant}"),
-                    },
-                    None => 'variant_loop: loop {
-                        variant = iter.next().copied();
-
-                        match variant {
-                            Some(1 | 2) => break 'variant_loop,
-                            Some(0) => continue,
-                            Some(_) => unreachable!("should parse fully"),
-                            None => break 'parse,
-                        }
-                    },
-                }
-                continue;
+                match next_variant(&mut io_buffer_iter) {
+                    Some((next_variant, next_size_remaining)) => {
+                        variant = next_variant;
+                        size_remaining = next_size_remaining;
+                        continue;
+                    }
+                    None => break 'parse,
+                };
             }
 
-            let next = iter.next();
-
-            if next.is_none() {
+            let Some(&next) = io_buffer_iter.next() else {
                 break 'parse;
-            }
+            };
+
             match variant {
-                Some(1) => a_buffer[struct_buffer_idx] = *next.unwrap(),
-                Some(2) => b_buffer[struct_buffer_idx] = *next.unwrap(),
-                Some(variant) => panic!("unknown variant {variant}"),
-                None => unreachable!(),
+                1 => a_buffer[struct_buffer_idx] = next,
+                2 => b_buffer[struct_buffer_idx] = next,
+                variant => unreachable!("unknown variant {variant}"),
             }
 
             size_remaining -= 1;
@@ -74,30 +75,28 @@ fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
             if size_remaining > 0 {
                 continue;
             }
-            unsafe {
-                match variant.unwrap() {
-                    1 => {
-                        let a = std::mem::transmute::<[u8; size_of::<A>()], A>(a_buffer);
-                        println!(
-                            "recieved A: a = {}, b = {}, c = '{}'",
-                            a.a,
-                            a.b,
-                            a.c.iter().map(|c| *c as char).collect::<String>()
-                        );
-                    }
-                    2 => {
-                        let b = std::mem::transmute::<[u8; size_of::<B>()], B>(b_buffer);
-                        println!(
-                            "recieved B: a = {}, b = '{}'",
-                            b.a,
-                            b.b.iter().map(|c| *c as char).collect::<String>()
-                        );
-                    }
-                    _ => unreachable!(),
-                }
-            }
+
             struct_buffer_idx = 0;
-            variant = None;
+            match variant {
+                1 => unsafe {
+                    let a = transmute::<[u8; size_of::<A>()], A>(a_buffer);
+                    println!(
+                        "recieved A {{\n    value_0={},\n    value_1={},\n    message='{}',\n}}",
+                        a.value_0,
+                        a.value_1,
+                        a.message.iter().map(|c| *c as char).collect::<String>()
+                    );
+                },
+                2 => unsafe {
+                    let b = transmute::<[u8; size_of::<B>()], B>(b_buffer);
+                    println!(
+                        "recieved B {{\n    value_0={},\n    message='{}',\n}}",
+                        b.value_0,
+                        b.message.iter().map(|c| *c as char).collect::<String>()
+                    );
+                },
+                variant => unreachable!("unknown variant {variant}"),
+            }
         }
     }
 }
