@@ -65,7 +65,7 @@ int main(void) {
   char b_buffer[sizeof(b) + 1];
   copy_struct(2, b_buffer, (char *)&b, sizeof(b));
 
-  int socket_fd = connection();
+  int socket_fd = connection_fd();
   if (send(socket_fd, a_buffer, sizeof(a_buffer), 0) < 0) {
     error("could not send");
   }
