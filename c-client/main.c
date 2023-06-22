@@ -2,7 +2,7 @@
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <strings.h>
+#include <string.h>
 #include <unistd.h>
 
 void error(char *message) {
@@ -21,11 +21,10 @@ struct B {
   char b[48];
 };
 
-int main(void) {
-
-  int socket_id = 0;
-  if ((socket_id = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    error("socket");
+int connection_fd(void) {
+  int socket_fd = 0;
+  if ((socket_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    error("could not get socket");
   }
 
   struct sockaddr_in address = {
@@ -34,22 +33,29 @@ int main(void) {
       .sin_port = htons(8080),
   };
 
-  if (connect(socket_id, (struct sockaddr *)&address, sizeof(address)) < 0) {
-    error("connect");
+  if (connect(socket_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+    error("could not connect, is the server running?");
   }
 
+  return socket_fd;
+}
+
+void copy_struct(char variant, char *buffer, char *instance,
+                 size_t instance_size) {
+  *buffer = variant;
+  buffer++;
+  memcpy(buffer, instance, instance_size);
+}
+
+int main(void) {
   struct A a = {
       .a = 518230123159632841,
       .b = 59581231,
       .c = "123 hello world from a!",
   };
+
   char a_buffer[sizeof(a) + 1];
-  a_buffer[0] = 1;
-  char *a_ptr = (char *)&a;
-  for (int i = 1; i < sizeof(a) + 1; i++) {
-    a_buffer[i] = *a_ptr;
-    a_ptr++;
-  }
+  copy_struct(1, a_buffer, (char *)&a, sizeof(a));
 
   struct B b = {
       .a = 12039123,
@@ -57,20 +63,14 @@ int main(void) {
   };
 
   char b_buffer[sizeof(b) + 1];
-  b_buffer[0] = 2;
-  char *b_ptr = (char *)&b;
-  for (int i = 1; i < sizeof(b) + 1; i++) {
-    b_buffer[i] = *b_ptr;
-    b_ptr++;
-  }
+  copy_struct(2, b_buffer, (char *)&b, sizeof(b));
 
-  if (send(socket_id, a_buffer, sizeof(a_buffer), 0) < 0) {
-    error("send");
+  int socket_fd = connection();
+  if (send(socket_fd, a_buffer, sizeof(a_buffer), 0) < 0) {
+    error("could not send");
   }
-
-  if (send(socket_id, b_buffer, sizeof(b_buffer), 0) < 0) {
-    error("send");
+  if (send(socket_fd, b_buffer, sizeof(b_buffer), 0) < 0) {
+    error("could not send");
   }
-
-  close(socket_id);
+  close(socket_fd);
 }
