@@ -63,7 +63,7 @@ int main(void)
     copy_struct(1, a_buffer, (char*)&a, sizeof(a));
 
     struct B b = {
-        .a = 0x180504,
+        .a = 0x18052004,
         .b = "321 321 321 321 hello world from b! 321 321 321",
     };
 
