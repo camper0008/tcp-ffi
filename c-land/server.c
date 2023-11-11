@@ -132,7 +132,6 @@ int main(void)
                     break;
                 }
                 if (size_remaining == 0) {
-                    printf("i=%d", io_buffer_size);
                     char next_variant = *io_buffer;
                     switch (next_variant) {
                         case Padding:
