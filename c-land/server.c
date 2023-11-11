@@ -118,7 +118,6 @@ int main(void)
             int io_buffer_size = recv(client, io_buffer, BUFFER_SIZE, 0);
 
             if (io_buffer_size == 0) {
-                printf("read 0 bytes\n");
                 break;
             }
 
@@ -129,7 +128,11 @@ int main(void)
             // parsing loop
             loop
             {
+                if (io_buffer_size <= 0) {
+                    break;
+                }
                 if (size_remaining == 0) {
+                    printf("i=%d", io_buffer_size);
                     char next_variant = *io_buffer;
                     switch (next_variant) {
                         case Padding:
@@ -148,10 +151,9 @@ int main(void)
                     }
                     io_buffer_size -= 1;
                     io_buffer++;
-                }
-
-                if (io_buffer_size <= 0) {
-                    break;
+                    if (io_buffer_size <= 0) {
+                        break;
+                    }
                 }
 
                 switch (variant) {
