@@ -205,4 +205,6 @@ int main(void)
         }
     }
     free(io_buffer_start);
+    free(a_buffer_start);
+    free(b_buffer_start);
 }
